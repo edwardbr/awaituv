@@ -42,6 +42,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines -std=c++20")
 find_package (CURL REQUIRED)
 link_libraries (libuv::uv curl)
+add_compile_definitions("_LIBCPP_INLINE_VISIBILITY=" _NOEXCEPT=noexcept)
 endif ()
 
 include_directories (inc)

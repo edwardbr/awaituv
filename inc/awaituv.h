@@ -7,11 +7,12 @@
 #include <string.h>
 #include <string>
 #include <tuple>
+#include <typeinfo>
 #include <uv.h> // libuv
 #include <vector>
-#include <typeinfo>
 
 #if __has_include(<coroutine>)
+#include <cxxabi.h>
 #include <coroutine>
 #elif __has_include(<experimental/coroutine>)
 #include <experimental/coroutine>
@@ -20,6 +21,17 @@
 #endif
 
 namespace awaituv {
+
+#if __has_include(<coroutine>)
+#include <coroutine>
+using suspend_never = std::suspend_never;
+#define coroutine_handle std::coroutine_handle
+#else
+using suspend_never = std::experimental::suspend_never;
+#define coroutine_handle std::experimental::coroutine_handle
+#endif
+
+
 enum struct future_error {
   not_ready,       // get_value called when value not available
   already_acquired // attempt to get another future
@@ -85,7 +97,7 @@ struct awaitable_state_base {
     return _ready;
   }
 
-  void await_suspend(std::experimental::coroutine_handle<> resume_cb)
+  void await_suspend(coroutine_handle<> resume_cb)
   {
     set_coroutine_callback(resume_cb);
   }
@@ -95,40 +107,39 @@ template <typename T>
 struct awaitable_state : public awaitable_state_base {
   T _value;
 
-  awaitable_state()
-  {
-  }
-
-  template <typename Arg>
-  awaitable_state(Arg arg)
-  {
-    auto id = typeid(arg).name();
-  }
+  awaitable_state() = default;
 
   template <typename Arg>
   awaitable_state(Arg* arg)
   {
     auto id = typeid(arg).name();
+    #if __has_include(<coroutine>)
+      int     status;
+      auto realname = abi::__cxa_demangle(id, 0, 0, &status);
+      printf("%s\n\n", realname);
+    #else
+      printf("%s\n\n", id);
+    #endif
   }
 
   template <typename Arg>
-  awaitable_state(const Arg& arg)
-  {
-    auto id = typeid(arg).name();
-  }
+  awaitable_state(const Arg& arg) = delete;
 
   template <typename Arg>
-  awaitable_state(Arg&& arg)
-  {
-    auto id = typeid(arg).name();
-  }
+  awaitable_state(Arg&& arg) = delete;
 
   template <typename Arg, typename... Args>
   awaitable_state(Arg&& arg, Args&&... args) : awaitable_state(std::forward<Args>(args)...)
   {
     auto id = typeid(arg).name();
+    #if __has_include(<coroutine>)
+      int     status;
+      auto realname = abi::__cxa_demangle(id, 0, 0, &status);
+      printf("%s\n\n", realname);
+    #else
+      printf("%s\n\n", id);
+    #endif
   }
-
   void set_value(const T& t)
   {
     _value = t;
@@ -163,31 +174,36 @@ struct awaitable_state : public awaitable_state_base {
 // specialization of awaitable_state<void>
 template <>
 struct awaitable_state<void> : public awaitable_state_base {
-  
-  awaitable_state()
-  {
-  }
-
-  template <typename Arg>
-  awaitable_state(Arg* arg)
-  {
-    auto id = typeid(arg).name();
-  }
+  awaitable_state()  = default;
 
   template <typename Arg>
   awaitable_state(Arg&& arg)
   {
     auto id = typeid(arg).name();
+    #if __has_include(<coroutine>)
+      int     status;
+      auto realname = abi::__cxa_demangle(id, 0, 0, &status);
+      printf("%s\n\n", realname);
+    #else
+      printf("%s\n\n", id);
+    #endif
   }
 
   template <typename Arg, typename... Args>
-  awaitable_state(Arg&& arg, Args&&... args) : awaitable_state(std::forward<Args>(args)...)
+  awaitable_state(Arg&& arg, Args&&... args)
+    : awaitable_state(std::forward<Args>(args)...)
   {
     auto id = typeid(arg).name();
+    #if __has_include(<coroutine>)
+      int     status;
+      auto realname = abi::__cxa_demangle(id, 0, 0, &status);
+      printf("%s\n\n", realname);
+    #else
+      printf("%s\n\n", id);
+    #endif
   }
 
 
-  
   void get_value() const
   {
     if (!_ready)
@@ -341,7 +357,7 @@ struct future_t {
     return _state->_ready;
   }
 
-  void await_suspend(std::experimental::coroutine_handle<> resume_cb)
+  void await_suspend(coroutine_handle<> resume_cb)
   {
     _state->set_coroutine_callback(resume_cb);
     _state->execute_on_await();
@@ -356,6 +372,21 @@ struct future_t {
   {
     return _state->get_value();
   }
+};
+
+
+
+struct suspend_if {
+  bool suspend = false;
+  _LIBCPP_INLINE_VISIBILITY
+  bool await_ready() const _NOEXCEPT
+  {
+    return suspend;
+  }
+  _LIBCPP_INLINE_VISIBILITY
+  void await_suspend(coroutine_handle<>) const _NOEXCEPT {}
+  _LIBCPP_INLINE_VISIBILITY
+  void await_resume() const _NOEXCEPT {}
 };
 
 template <typename T, typename state_t>
@@ -394,18 +425,6 @@ struct promise_t {
     return future_type(_state);
   }
 
-
-
-struct suspend_if {
-  bool suspend = false;
-  _LIBCPP_INLINE_VISIBILITY
-  bool await_ready() const _NOEXCEPT { return suspend; }
-  _LIBCPP_INLINE_VISIBILITY
-  void await_suspend(std::experimental::coroutine_handle<>) const _NOEXCEPT {}
-  _LIBCPP_INLINE_VISIBILITY
-  void await_resume() const _NOEXCEPT {}
-};
-
   suspend_if initial_suspend() const
   {
     // Suspend if _on_await has something in it.
@@ -413,7 +432,7 @@ struct suspend_if {
     return suspend_if{ suspend };
   }
 
-  std::experimental::suspend_never final_suspend() const
+  suspend_never final_suspend() const
   {
     return {};
   }
@@ -453,12 +472,12 @@ struct promise_t<void, state_t> {
     return future_type(_state);
   }
 
-  std::experimental::suspend_never initial_suspend() const
+  suspend_never initial_suspend() const
   {
     return {};
   }
 
-  std::experimental::suspend_never final_suspend() const
+  suspend_never final_suspend() const
   {
     return {};
   }
@@ -657,9 +676,7 @@ public:
 
 // Simple RAII for uv_fs_t type
 struct fs_t : public ::uv_fs_t {
-  fs_t() : ::uv_fs_t{ 0 }
-  {
-  }
+  fs_t() : ::uv_fs_t{ 0 } {}
   ~fs_t()
   {
     ::uv_fs_req_cleanup(this);
