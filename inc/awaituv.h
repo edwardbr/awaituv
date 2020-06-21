@@ -9,11 +9,14 @@
 #include <tuple>
 #include <uv.h> // libuv
 #include <vector>
+#include <typeinfo>
 
-#if __has_include(<experimental/coroutine>)
+#if __has_include(<coroutine>)
+#include <coroutine>
+#elif __has_include(<experimental/coroutine>)
 #include <experimental/coroutine>
 #else
-#include <experimental\resumable>
+#include <experimental/resumable>
 #endif
 
 namespace awaituv {
@@ -92,6 +95,40 @@ template <typename T>
 struct awaitable_state : public awaitable_state_base {
   T _value;
 
+  awaitable_state()
+  {
+  }
+
+  template <typename Arg>
+  awaitable_state(Arg arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg>
+  awaitable_state(Arg* arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg>
+  awaitable_state(const Arg& arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg>
+  awaitable_state(Arg&& arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg, typename... Args>
+  awaitable_state(Arg&& arg, Args&&... args) : awaitable_state(std::forward<Args>(args)...)
+  {
+    auto id = typeid(arg).name();
+  }
+
   void set_value(const T& t)
   {
     _value = t;
@@ -126,6 +163,31 @@ struct awaitable_state : public awaitable_state_base {
 // specialization of awaitable_state<void>
 template <>
 struct awaitable_state<void> : public awaitable_state_base {
+  
+  awaitable_state()
+  {
+  }
+
+  template <typename Arg>
+  awaitable_state(Arg* arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg>
+  awaitable_state(Arg&& arg)
+  {
+    auto id = typeid(arg).name();
+  }
+
+  template <typename Arg, typename... Args>
+  awaitable_state(Arg&& arg, Args&&... args) : awaitable_state(std::forward<Args>(args)...)
+  {
+    auto id = typeid(arg).name();
+  }
+
+
+  
   void get_value() const
   {
     if (!_ready)
@@ -332,11 +394,23 @@ struct promise_t {
     return future_type(_state);
   }
 
-  std::experimental::suspend_if initial_suspend() const
+
+
+struct suspend_if {
+  bool suspend = false;
+  _LIBCPP_INLINE_VISIBILITY
+  bool await_ready() const _NOEXCEPT { return suspend; }
+  _LIBCPP_INLINE_VISIBILITY
+  void await_suspend(std::experimental::coroutine_handle<>) const _NOEXCEPT {}
+  _LIBCPP_INLINE_VISIBILITY
+  void await_resume() const _NOEXCEPT {}
+};
+
+  suspend_if initial_suspend() const
   {
     // Suspend if _on_await has something in it.
     bool suspend = _state->_on_await != nullptr;
-    return std::experimental::suspend_if{ suspend };
+    return suspend_if{ suspend };
   }
 
   std::experimental::suspend_never final_suspend() const

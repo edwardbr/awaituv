@@ -120,7 +120,7 @@ future_t<void> start_dump_file(const std::string& str)
 
   fs_t                     openreq;
   awaitable_state<uv_file> state;
-  uv_file file = co_await fs_open(state, uv_default_loop(), &openreq,
+  /*uv_file file = co_await fs_open(state, uv_default_loop(), &openreq,
                                   str.c_str(), O_RDONLY, 0);
   if (file > 0) {
     while (1) {
@@ -134,29 +134,34 @@ future_t<void> start_dump_file(const std::string& str)
       fs_t                 req;
       awaitable_state<int> writestate;
       (void)co_await       fs_write(writestate, uv_default_loop(), &req,
-                              1 /*stdout*/, &buffer, 1, -1);
+                              1 
+                              //stdout
+                              , &buffer, 1, -1);
     }
     fs_t                 closereq;
     awaitable_state<int> closestate;
     (void)co_await fs_close(closestate, uv_default_loop(), &closereq, file);
-  }
+  }*/
+  co_return;
 }
 
-future_t<void> start_hello_world()
+/*future_t<void> start_hello_world()
 {
   for (int i = 0; i < 1000; ++i) {
     string_buf_t         buf("\nhello world\n");
     fs_t                 req;
     awaitable_state<int> writestate;
-    (void)co_await fs_write(writestate, uv_default_loop(), &req, 1 /*stdout*/,
+    (void)co_await fs_write(writestate, uv_default_loop(), &req, 1 
+    stdout
+    ,
                             &buf, 1, -1);
   }
-}
+}*/
 
 int main(int argc, char* argv[])
 {
   // Process command line
-  if (argc == 1) {
+ /* if (argc == 1) {
     printf("testuv [--sequential] <file1> <file2> ...");
     return -1;
   }
@@ -195,7 +200,7 @@ int main(int argc, char* argv[])
   stop_color_changer();
   uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
-  uv_loop_close(uv_default_loop());
+  uv_loop_close(uv_default_loop());*/
 
   return 0;
 }
